@@ -2,6 +2,12 @@
 
 Las notas detalladas de cada versión están en [`changelogs/`](changelogs) y en [Releases](../../releases).
 
+## Sin publicar — Inicio nuevo: auto grande, velocímetro y riel lateral
+- Inicio rediseñado: tarjeta grande del auto (Toyota Corolla 2012 plata metálico de fábrica; tu foto la reemplaza), velocímetro de arco con GPS y aceite, música y mapa abajo.
+- Riel izquierdo: Android Auto (botón principal) y CarPlay arriba; debajo, los 7 botones personalizables de siempre (antes estaban en la barra inferior).
+- Acento naranja por defecto (se sigue pudiendo cambiar en Ajustes → Apariencia).
+- Nuevos: `SpeedGauge.java`, `assets/car/corolla_2012.png` (fuente en `art/corolla_2012.svg`).
+
 ## 2.9.4 — Lista para tiendas F-Droid
 - Instalada desde F-Droid/IzzyOnDroid: se actualiza por la tienda; los avisos de GitHub son opcionales y explicados.
 

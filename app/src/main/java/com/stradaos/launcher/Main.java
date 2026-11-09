@@ -102,6 +102,10 @@ public class Main extends Activity {
     private int builtW, builtH;
     /** Ancho extra (en unidades de 1024x600) en pantallas más anchas. */
     private float ex;
+    /** Diseño (unidades de 1024x600): riel de botones a la izquierda y tarjetas a su derecha. */
+    static final float CX = 92f;
+    private float heroW, gaugeW, musicW, mapW;
+    private SpeedGauge gauge;
     static final int[] SIM_W = {0, 1024, 1280, 1920, 2000};
     static final int[] SIM_H = {0, 600, 720, 720, 1200};
 
@@ -689,19 +693,19 @@ public class Main extends Activity {
         blp.gravity = Gravity.CENTER;
         root.addView(board, blp);
 
-        // franja del dock a todo el ancho (aunque la pantalla no sea 1024x600)
-        View dockBg = new View(this);
-        dockBg.setBackgroundColor(DOCK);
-        FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                (int) (H - ((H - 600 * s) / 2 + 456 * s)) + 1);
-        dlp.gravity = Gravity.BOTTOM;
-        root.addView(dockBg, 0, dlp);
+        // reparto del ancho: arriba el auto y el velocímetro, abajo la música y el mapa (el ancho extra de pantallas anchas va a la tarjeta del auto y al mapa)
+        float cw = 1024 + ex - CX - 8;
+        gaugeW = 326f;
+        heroW = cw - gaugeW - 12;
+        musicW = 456f;
+        mapW = cw - musicW - 12;
 
-        buildTop();
         buildCarCard();
+        buildSpeedCard();
         buildAaCard();
         buildAudioCard();
-        buildDock();
+        buildRail();
+        buildTop();   // al final: el reloj y el clima se dibujan encima de la tarjeta del auto
 
         drawer = null;
         settingsView = null;
@@ -712,87 +716,88 @@ public class Main extends Activity {
     }
 
     private void buildTop() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setBaselineAligned(true);
-        timeTv = tv("", 30, TEXT, true);
-        dateTv = tv("", 14, MUTED, false);
-        dateTv.setPadding((int) (12 * s), 0, 0, 0);
-        row.addView(timeTv);
-        row.addView(dateTv);
-        placeWrap(board, row, 24, 10);
+        // hora y fecha: arriba a la izquierda de la tarjeta del auto
+        LinearLayout tcol = new LinearLayout(this);
+        tcol.setOrientation(LinearLayout.VERTICAL);
+        timeTv = tv("", 34, TEXT, true);
+        dateTv = tv("", 13, MUTED, false);
+        dateTv.setPadding(0, (int) (5 * s), 0, 0);
+        tcol.addView(timeTv);
+        tcol.addView(dateTv);
+        placeWrap(board, tcol, CX + 22, 20);
 
-        LinearLayout right = new LinearLayout(this);
-        right.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        // clima y engranaje: arriba a la derecha de la tarjeta del auto
+        float gearX = CX + heroW - 16 - 40;
         weatherBox = new LinearLayout(this);
-        weatherBox.setGravity(Gravity.CENTER_VERTICAL);
+        weatherBox.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         weatherIc = icon("cloud", 20);
         weatherBox.addView(weatherIc, new LinearLayout.LayoutParams((int) (20 * s), (int) (20 * s)));
         weatherTv = tv("", 15, TEXT, true);
         weatherTv.setPadding((int) (6 * s), 0, 0, 0);
         weatherBox.addView(weatherTv);
         weatherCityTv = tv("", 13, MUTED, false);
-        weatherCityTv.setPadding((int) (6 * s), 0, (int) (14 * s), 0);
+        weatherCityTv.setPadding((int) (6 * s), 0, 0, 0);
         weatherBox.addView(weatherCityTv);
-        View sep = new View(this);
-        sep.setBackgroundColor(BTN);
-        weatherBox.addView(sep, new LinearLayout.LayoutParams(Math.max(1, (int) s), (int) (18 * s)));
         weatherBox.setVisibility(View.GONE);
-        right.addView(weatherBox);
-        greetTv = tv("", 15, SOFT, false);
-        greetTv.setPadding((int) (14 * s), 0, 0, 0);
-        right.addView(greetTv);
-        place(board, right, 400 + ex, 14, 552, 32);
+        place(board, weatherBox, gearX - 10 - 250, 24, 250, 32);
         View gear = circleIcon("settings", 40, 22, CIRCLE);
-        place(board, gear, 964 + ex, 12, 40, 40);
+        place(board, gear, gearX, 20, 40, 40);
         gear.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { openSettings(); }
-        });
-        greetTv.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { openSettings(); }
         });
     }
 
+    /** Tarjeta grande del auto: tu foto (sin fondo) o, si no hay, el Corolla 2012 plata metálico de fábrica. */
     private void buildCarCard() {
-        FrameLayout card = card(16, 64, 300, 380, CARD);
-        carTv = tv(prefs.getString("car_name", "Mi vehículo"), 20, TEXT, true);
-        place(card, carTv, 20, 16, 260, 26);
+        FrameLayout card = card(CX, 8, heroW, 340, CARD);
+
+        Bitmap photo = CarPhoto.load(this);
+        ImageView car = new ImageView(this);
+        car.setImageBitmap(photo != null ? photo : asset("car/corolla_2012.png"));
+        car.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        place(card, car, 20, 62, heroW - 40, 206);
+        car.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) { photoMenu(); return true; }
+        });
+
+        carTv = tv(prefs.getString("car_name", "Mi vehículo"), 22, TEXT, true);
+        place(card, carTv, 22, 276, heroW - 44 - 240, 28);
         TextView chip = tv(prefs.getString("car_tag", ""), 11, Color.WHITE, true);
         chipTv = chip;
         chip.setPadding((int) (8 * s), (int) (3 * s), (int) (8 * s), (int) (3 * s));
         chip.setBackground(round(RED, 8));
         chip.setVisibility(prefs.getString("car_tag", "").trim().length() == 0 ? View.GONE : View.VISIBLE);
-        placeWrap(card, chip, 20, 46);
+        placeWrap(card, chip, 22, 306);
 
-        Bitmap photo = CarPhoto.load(this);
-        if (photo != null) {
-            ImageView car = new ImageView(this);
-            car.setImageBitmap(photo);
-            car.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            place(card, car, 18, 78, 264, 160);
-            car.setOnLongClickListener(new View.OnLongClickListener() {
-                public boolean onLongClick(View v) { photoMenu(); return true; }
-            });
-        } else {
-            LinearLayout ph = new LinearLayout(this);
-            ph.setOrientation(LinearLayout.VERTICAL);
-            ph.setGravity(Gravity.CENTER);
-            ph.setBackground(round(INNER, 16));
-            ImageView ic = icon("directions_car", 72);
-            ic.setAlpha(0.35f);
-            ph.addView(ic, new LinearLayout.LayoutParams((int) (72 * s), (int) (72 * s)));
-            TextView t = tv("Toca para poner la foto de tu vehículo", 12, MUTED, false);
-            t.setPadding(0, (int) (6 * s), 0, 0);
-            ph.addView(t);
-            place(card, ph, 18, 82, 264, 152);
-            ph.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { pickPhoto(); }
-            });
-        }
+        greetTv = tv("", 15, SOFT, false);
+        greetTv.setGravity(Gravity.RIGHT);
+        place(card, greetTv, heroW - 20 - 240, 308, 240, 22);
+        greetTv.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { openSettings(); }
+        });
+    }
+
+    /** Tarjeta del velocímetro: arco con marcas, velocidad por GPS, estado del GPS y aceite. */
+    private void buildSpeedCard() {
+        FrameLayout card = card(CX + heroW + 12, 8, gaugeW, 340, CARD);
+        gauge = new SpeedGauge(this, s);
+        place(card, gauge, (gaugeW - 214) / 2, 10, 214, 214);
+
+        LinearLayout sv = new LinearLayout(this);
+        sv.setOrientation(LinearLayout.VERTICAL);
+        sv.setGravity(Gravity.CENTER_HORIZONTAL);
+        speedTv = tv("0", 62, TEXT, true);
+        speedTv.setGravity(Gravity.CENTER);
+        sv.addView(speedTv, new LinearLayout.LayoutParams(-1, -2));
+        TextView kmh = tv(useMph() ? "mph" : "km/h", 15, MUTED, false);
+        kmh.setGravity(Gravity.CENTER);
+        kmh.setPadding(0, (int) (4 * s), 0, 0);
+        sv.addView(kmh, new LinearLayout.LayoutParams(-1, -2));
+        place(card, sv, 0, 70, gaugeW, 104);
 
         FrameLayout box = new FrameLayout(this);
         box.setBackground(round(INNER, 16));
-        place(card, box, 12, 250, 276, 118);
+        place(card, box, (gaugeW - 276) / 2, 232, 276, 100);
 
         LinearLayout lbl = new LinearLayout(this);
         lbl.setGravity(Gravity.CENTER_VERTICAL);
@@ -802,27 +807,18 @@ public class Main extends Activity {
         TextView vl = tv("Velocidad", 13, MUTED, false);
         vl.setPadding((int) (6 * s), 0, 0, 0);
         lbl.addView(vl);
-        placeWrap(box, lbl, 16, 12);
+        placeWrap(box, lbl, 16, 20);
 
         LinearLayout g = new LinearLayout(this);
         g.setGravity(Gravity.CENTER_VERTICAL);
         gpsDot = new View(this);
         gpsDot.setBackground(round(MUTED, 4));
         g.addView(gpsDot, new LinearLayout.LayoutParams((int) (8 * s), (int) (8 * s)));
-        gpsTv = tv("GPS", 11, MUTED, false);
+        gpsTv = tv("GPS", 12, MUTED, false);
         gpsTv.setPadding((int) (6 * s), 0, 0, 0);
         g.addView(gpsTv);
-        g.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        place(box, g, 120, 12, 140, 18);
+        placeWrap(box, g, 16, 52);
 
-        LinearLayout sv = new LinearLayout(this);
-        sv.setBaselineAligned(true);
-        speedTv = tv("0", 56, TEXT, true);
-        TextView kmh = tv(useMph() ? "mph" : "km/h", 15, MUTED, false);
-        kmh.setPadding((int) (8 * s), 0, 0, 0);
-        sv.addView(speedTv);
-        sv.addView(kmh);
-        placeWrap(box, sv, 16, 34);
         buildOilBadge(box);
         setGps(false, 0);
     }
@@ -893,7 +889,7 @@ public class Main extends Activity {
     private void buildOilBadge(FrameLayout box) {
         View sep = new View(this);
         sep.setBackgroundColor(BTN);
-        place(box, sep, 166, 40, 1, 62);
+        place(box, sep, 166, 18, 1, 64);
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         LinearLayout top = new LinearLayout(this);
@@ -914,7 +910,7 @@ public class Main extends Activity {
         oilBar = new View(this);
         bar.addView(oilBar, new FrameLayout.LayoutParams(0, -1));
         col.addView(bar, new LinearLayout.LayoutParams(-1, (int) (4 * s)));
-        place(box, col, 176, 44, 88, 58);
+        place(box, col, 176, 22, 88, 58);
         col.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { oilMenu(); } });
         updateOilBadge();
     }
@@ -1139,7 +1135,7 @@ public class Main extends Activity {
 
     private void buildAaCard() {
         FrameLayout card = new FrameLayout(this);
-        place(board, card, 328, 64, 420 + ex, 380);
+        place(board, card, CX + musicW + 12, 360, mapW, 232);
         // fondo decorativo mientras no hay GPS; encima, el mapa en vivo
         card.addView(new MapView(this, s, 20 * s), new FrameLayout.LayoutParams(-1, -1));
         if (!prefs.getBoolean("map_live", true)) { liveMap = null; seedLastLocation(); buildAaCardRest(card); return; }
@@ -1174,61 +1170,15 @@ public class Main extends Activity {
             public void onClick(View v) { fixGps(); }
         });
 
-        FrameLayout panel = new FrameLayout(this);
-        panel.setBackground(round((CARD & 0x00FFFFFF) | 0xEB000000, 16));
-        place(card, panel, 12, 284, 396 + ex, 84);
-
         View navBtn = circleIcon("map", 52, 26, (CARD & 0x00FFFFFF) | 0xEB000000);
-        place(card, navBtn, 356 + ex, 220, 52, 52);
+        place(card, navBtn, mapW - 12 - 52, 232 - 12 - 52, 52, 52);
         navBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { openNavApp(); }
         });
         navBtn.setOnLongClickListener(new View.OnLongClickListener() {
             public boolean onLongClick(View v) { pickFor("nav_app", "Navegación"); return true; }
         });
-
-        View aa = projButton("navigation", "Android Auto", RED, true);
-        aaBtnTv = (TextView) aa.getTag();
-        place(panel, aa, 10, 10, 184 + ex / 2, 64);
-        View cp = projButton("phone_iphone", "CarPlay", BTN, false);
-        cpSubTv = (TextView) cp.getTag();
-        place(panel, cp, 202 + ex / 2, 10, 184 + ex / 2, 64);
-        aaSubTv = aaBtnTv;
-
-        aa.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { openAndroidAuto(); }
-        });
-        aa.setOnLongClickListener(new View.OnLongClickListener() {
-            public boolean onLongClick(View v) { chooseConnection(null); return true; }
-        });
-        cp.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { openCarPlay(); }
-        });
-        cp.setOnLongClickListener(new View.OnLongClickListener() {
-            public boolean onLongClick(View v) { pickFor("carplay", "CarPlay"); return true; }
-        });
         updateMapTag();
-    }
-
-    /** Botón de proyección: ícono + título + subtítulo (el subtítulo se guarda en getTag()). */
-    private View projButton(String ic, String title, int color, boolean filled) {
-        LinearLayout b = new LinearLayout(this);
-        b.setGravity(Gravity.CENTER_VERTICAL);
-        b.setBackground(round(color, 14));
-        b.setPadding((int) (12 * s), 0, (int) (8 * s), 0);
-        ImageView pic = icon(ic, 26);
-        if (filled) pic.clearColorFilter();
-        b.addView(pic, new LinearLayout.LayoutParams((int) (26 * s), (int) (26 * s)));
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding((int) (10 * s), 0, 0, 0);
-        col.addView(tv(title, 15, filled ? Color.WHITE : TEXT, true));
-        TextView sub = tv("", 11, filled ? 0xD9FFFFFF : MUTED, false);
-        sub.setPadding(0, (int) (3 * s), 0, 0);
-        col.addView(sub);
-        b.addView(col, new LinearLayout.LayoutParams(-1, -2));
-        b.setTag(sub);
-        return b;
     }
 
     // ── mapa en vivo ──
@@ -1337,29 +1287,27 @@ public class Main extends Activity {
     }
 
     private void buildAudioCard() {
-        FrameLayout card = card(760 + ex, 64, 248, 380, CARD);
-        placeWrap(card, tv("AUDIO", 11, MUTED, true), 18, 14);
+        FrameLayout card = card(CX, 360, musicW, 232, CARD);
+        playerArt = new PlayerArt(this, s, asset("ic/music_note.png"));
+        place(card, playerArt, 14, 16, 200, 200);
+        float x = 228, w = musicW - x - 18;
+        placeWrap(card, tv("AUDIO", 11, MUTED, true), x, 22);
         sourceTv = tv("", 11, RED, true);
         sourceTv.setGravity(Gravity.RIGHT);
-        place(card, sourceTv, 80, 14, 150, 16);
-        playerArt = new PlayerArt(this, s, asset("ic/music_note.png"));
-        place(card, playerArt, 34, 34, 180, 180);
-        trackTv = tv("Nada sonando", 17, TEXT, true);
-        trackTv.setGravity(Gravity.CENTER_HORIZONTAL);
-        place(card, trackTv, 14, 222, 220, 24);
+        place(card, sourceTv, x + 70, 22, w - 70, 16);
+        trackTv = tv("Nada sonando", 20, TEXT, true);
+        place(card, trackTv, x, 50, w, 26);
         artistTv = tv("Radio, Bluetooth o USB", 13, MUTED, false);
-        artistTv.setGravity(Gravity.CENTER_HORIZONTAL);
-        place(card, artistTv, 14, 250, 220, 20);
+        place(card, artistTv, x, 80, w, 20);
         timePosTv = tv("", 12, MUTED, false);
-        timePosTv.setGravity(Gravity.CENTER_HORIZONTAL);
-        place(card, timePosTv, 14, 274, 220, 18);
-        View prev = circleIcon("skip_previous", 52, 26, BTN);
+        place(card, timePosTv, x, 104, w, 18);
+        View prev = circleIcon("skip_previous", 48, 24, BTN);
         View play = circleIcon("play_arrow", 64, 32, RED);
         playIc = (ImageView) ((FrameLayout) play).getChildAt(0);
-        View next = circleIcon("skip_next", 52, 26, BTN);
-        place(card, prev, 30, 304, 52, 52);
-        place(card, play, 92, 298, 64, 64);
-        place(card, next, 166, 304, 52, 52);
+        View next = circleIcon("skip_next", 48, 24, BTN);
+        place(card, prev, x, 152, 48, 48);
+        place(card, play, x + 58, 144, 64, 64);
+        place(card, next, x + 132, 152, 48, 48);
         prev.setOnClickListener(mediaClick(KeyEvent.KEYCODE_MEDIA_PREVIOUS));
         play.setOnClickListener(mediaClick(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE));
         next.setOnClickListener(mediaClick(KeyEvent.KEYCODE_MEDIA_NEXT));
@@ -1440,43 +1388,76 @@ public class Main extends Activity {
         }
     }
 
-    private void buildDock() {
-        for (int i = 0; i < 7; i++) {
-            final int idx = i;
-            String t = dockTarget(i);
-            LinearLayout b = new LinearLayout(this);
-            b.setOrientation(LinearLayout.VERTICAL);
-            b.setGravity(Gravity.CENTER_HORIZONTAL);
-            Drawable appIc = t.startsWith("app:") ? appIcon(t.substring(4)) : null;
-            if (appIc != null) {
-                FrameLayout f = new FrameLayout(this);
-                GradientDrawable g = new GradientDrawable();
-                g.setShape(GradientDrawable.OVAL);
-                g.setColor(CIRCLE);
-                f.setBackground(g);
-                ImageView iv = new ImageView(this);
-                iv.setImageDrawable(appIc);
-                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (44 * s), (int) (44 * s));
-                lp.gravity = Gravity.CENTER;
-                f.addView(iv, lp);
-                b.addView(f, new LinearLayout.LayoutParams((int) (64 * s), (int) (64 * s)));
-            } else {
-                String id = t.startsWith("fn:") ? t.substring(3) : DOCK_DEFAULT[i];
-                b.addView(circleIcon(dockFn(id)[2], 64, 28, CIRCLE), new LinearLayout.LayoutParams((int) (64 * s), (int) (64 * s)));
-            }
-            TextView l = tv(dockName(i), 13, SOFT, false);
-            l.setGravity(Gravity.CENTER_HORIZONTAL);
-            l.setPadding(0, (int) (8 * s), 0, 0);
-            b.addView(l, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            place(board, b, 38 + (138 + ex / 6) * i, 474, 120, 110);
-            b.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { runDock(idx); }
-            });
-            b.setOnLongClickListener(new View.OnLongClickListener() {
-                public boolean onLongClick(View v) { dockMenu(idx, null); return true; }
-            });
+    /**
+     * Riel izquierdo: Android Auto (botón principal) y CarPlay arriba; debajo, los 7 botones personalizables
+     * de siempre (dejar presionado = cambiar app, función o nombre).
+     */
+    private void buildRail() {
+        FrameLayout rail = new FrameLayout(this);
+        rail.setBackground(round(DOCK, 26));
+        place(board, rail, 8, 8, 72, 584);
+
+        View aa = circleIcon("navigation", 52, 26, RED);
+        aa.setContentDescription("Android Auto");
+        place(rail, aa, 10, 12, 52, 52);
+        aa.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { openAndroidAuto(); }
+        });
+        aa.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) { chooseConnection(null); return true; }
+        });
+
+        View cp = circleIcon("phone_iphone", 52, 26, CIRCLE);
+        cp.setContentDescription("CarPlay");
+        place(rail, cp, 10, 70, 52, 52);
+        cp.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { openCarPlay(); }
+        });
+        cp.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) { pickFor("carplay", "CarPlay"); return true; }
+        });
+
+        View sep = new View(this);
+        sep.setBackgroundColor(BTN);
+        place(rail, sep, 18, 131, 36, 1);
+
+        for (int i = 0; i < 7; i++) place(rail, dockButton(i, 52), 10, 142 + 62 * i, 52, 52);
+
+        // refreshStates() escribe aquí el estado de Android Auto y de CarPlay; en el riel solo cabe el ícono
+        aaBtnTv = tv("", 11, MUTED, false);
+        cpSubTv = tv("", 11, MUTED, false);
+        aaSubTv = aaBtnTv;
+    }
+
+    /** Botón redondo N del riel: ícono de la función o ícono real de la app elegida. */
+    private View dockButton(final int i, float d) {
+        String t = dockTarget(i);
+        FrameLayout f;
+        Drawable appIc = t.startsWith("app:") ? appIcon(t.substring(4)) : null;
+        if (appIc != null) {
+            f = new FrameLayout(this);
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(CIRCLE);
+            f.setBackground(g);
+            ImageView iv = new ImageView(this);
+            iv.setImageDrawable(appIc);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (d * 0.68f * s), (int) (d * 0.68f * s));
+            lp.gravity = Gravity.CENTER;
+            f.addView(iv, lp);
+        } else {
+            String id = t.startsWith("fn:") ? t.substring(3) : DOCK_DEFAULT[i];
+            f = circleIcon(dockFn(id)[2], d, d * 0.46f, CIRCLE);
         }
+        f.setContentDescription(dockName(i));
+        f.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { runDock(i); }
+        });
+        f.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) { dockMenu(i, null); return true; }
+        });
+        return f;
     }
 
     private void runDock(int i) {
@@ -1822,6 +1803,7 @@ public class Main extends Activity {
         if (!ok) lastFix = 0;
         float v = useMph() ? kmh * 0.621371f : kmh;
         speedTv.setText(ok ? String.valueOf(Math.round(kmh < 2 ? 0 : v)) : "--");
+        if (gauge != null) gauge.setValue(ok && kmh >= 2 ? v : 0, useMph() ? 140f : 220f);
         int gs = ok ? 0 : gpsState();
         gpsTv.setText(ok ? "GPS" : I18n.t(gs == 1 ? "Sin permiso" : gs == 2 ? "GPS apagado" : "Buscando GPS"));
         gpsDot.setBackground(round(ok ? 0xFF3DDC84 : MUTED, 4));
@@ -2258,7 +2240,7 @@ public class Main extends Activity {
     }
 
     private void applyAccent() {
-        RED = prefs.getInt("accent", 0xFFFE3211);
+        RED = prefs.getInt("accent", 0xFFFF7A1A);
         int r = (RED >> 16) & 255, g = (RED >> 8) & 255, b = RED & 255;
         int br = (BG >> 16) & 255, bgc = (BG >> 8) & 255, bb = BG & 255, pct = LIGHT ? 16 : 18;
         RED_DARK = 0xFF000000 | ((r * pct / 100 + br * (100 - pct) / 100) << 16) | ((g * pct / 100 + bgc * (100 - pct) / 100) << 8) | (b * pct / 100 + bb * (100 - pct) / 100);
@@ -2954,7 +2936,7 @@ public class Main extends Activity {
         LinearLayout a = section(body, "Color de acento");
         LinearLayout r = rowBase(a, "Color", "Botones, anillo del reproductor, ruta y etiquetas");
         LinearLayout dots = new LinearLayout(this);
-        int cur = prefs.getInt("accent", 0xFFFE3211);
+        int cur = prefs.getInt("accent", 0xFFFF7A1A);
         for (int i = 0; i < ACCENT_COLORS.length; i++) {
             final int col = ACCENT_COLORS[i];
             View d = new View(this);
